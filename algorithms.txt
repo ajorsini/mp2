@@ -1,0 +1,23 @@
+Writes:
+  1. When a replica is down, the coordinator writes to other replicas and keep a local copy until the down replica comes back up.
+  2. When all replicas are down, the coordinator keeps a copy for some hours (timeout) expecting the replicas to come back up
+  3. When a replica receives a write request,
+  3.1. Log it in a log file in disk
+  3.2. Make changes in the appropriate memtables
+  3.2.1. In-Memory representation of key-value pairs
+  3.2.2. Cache that can be searched by key
+  3.2.3. write back, as opposed to write through
+  3.3. When memtable is old or full, flush to disk
+  3.3.1. SSTable, list of key-value pairs sorted by key
+  3.3.2. index file, an SSTable of key-position in data SSTable
+  3.3.3. bloom filter
+  4. Periodically merge SSTables
+
+Deletes:
+  1. add a tomstone to the log
+  2. when compacting, delete the item
+
+Read:
+  1. send read(key) to multiple replicas
+  2. when Q replicas return a value, the coordinator returns the latest-timestamped one
+  3. in the background the coordination may trigger key consistency to latest-timestamped value
