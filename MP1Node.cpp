@@ -108,8 +108,8 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	memberNode->heartbeat = 0;
 	memberNode->pingCounter = TFAIL;
 	memberNode->timeOutCounter = -1;
-  op = new Operation(memberNode->addr.addr, (long) 0, (long) 0, ALIVE, emulNet, par, log);
-  initMemberListTable(memberNode);
+	op = new Operation(memberNode, ALIVE, emulNet, par, log);
+//  initMemberListTable(memberNode);
 
   return 0;
 }
@@ -292,15 +292,17 @@ Address MP1Node::getJoinAddress() {
  * FUNCTION NAME: initMemberListTable
  *
  * DESCRIPTION: Initialize the membership list
- */
+
 void MP1Node::initMemberListTable(Member *memberNode) {
 	memberNode->memberList.clear();
+  memberNode->myPos = _memberList_add(memberNode, memberNode->addr.addr, memberNode->heartbeat, 0);
 }
+ */
 
 /**
  * FUNCTION NAME: printAddress
  *
- * DESCRIPTION: Print the Address
+ * DESCRIPTION: Print the Address,
  */
 void MP1Node::printAddress(Address *addr)
 {
@@ -313,6 +315,41 @@ void MP1Node::printAddress(Address *addr)
 /* ------------------------ myClasses Code ----------------------------------------------------
 	 --------------------------------------------------------------------------------------------
 	 -------------------------------------------------------------------------------------------- */
+
+/* ------------------------- memberList functions ------------------------------------- */
+
+vector<MemberListEntry>::iterator Operation::_memberList_add(char *addr, long hb, long ts) {
+	int id;
+	short port;
+  vector<MemberListEntry>::iterator p;
+
+	memcpy(&id, &addr[0], sizeof(int));
+	memcpy(&port, &addr[4], sizeof(short));
+	memberNode->memberList.emplace_back(id, port, hb, ts);
+	p = memberNode->memberList.end()-1;
+  return p;
+}
+
+vector<MemberListEntry>::iterator Operation::_memberList_search(char *addr) {
+	int id;
+	short port;
+  vector<MemberListEntry>::iterator p;
+
+	memcpy(&id, &addr[0], sizeof(int));
+	memcpy(&port, &addr[4], sizeof(short));
+	for(p = memberNode->memberList.begin(); p != memberNode->memberList.end(); p++)
+		if(p->id == id && p->port == port) break;
+  return p;
+}
+
+vector<MemberListEntry>::iterator Operation::_memberList_del(char *addr) {
+  vector<MemberListEntry>::iterator p = _memberList_search(addr);
+  if(p != memberNode->memberList.end())
+	  p = memberNode->memberList.erase(p);
+  return p;
+}
+
+/* ------------------------- end of memberList functions ------------------------------ */
 
 /* ------------------------- node.cpp ------------------------------ */
 
@@ -452,9 +489,10 @@ bool nodeEntry::operator >(const nodeEntry& anotherNodeEntry) {
 
 /* ------------------------- op.cpp ------------------------------ */
 
-Operation::Operation(char *addr, long hb, long myhb, Statuses status, EmulNet *emulNet, Params *par, Log *log) {
-  this->me = new nodeEntry(addr, hb, myhb, status, par);
-  this->recsz = sizeof(addr)+sizeof(hb)+sizeof(status);
+Operation::Operation(Member *memberNode, Statuses status, EmulNet *emulNet, Params *par, Log *log) {
+  this->me = new nodeEntry(memberNode->addr.addr, memberNode->heartbeat, memberNode->heartbeat, status, par);
+	this->memberNode = memberNode;
+  this->recsz = sizeof(memberNode->addr.addr)+sizeof(memberNode->heartbeat)+sizeof(status);
   this->peersList = this->first = this->last = NULL;
 	this->emulNet = emulNet;
 	this->par = par;
@@ -462,6 +500,8 @@ Operation::Operation(char *addr, long hb, long myhb, Statuses status, EmulNet *e
 	this->from = new Address;
 	this->to = new Address;
 	this->me->getAddress(this->from);
+	this->memberNode->memberList.clear();
+	this->memberNode->myPos = _memberList_add(memberNode->addr.addr, memberNode->heartbeat, 0);
 }
 
 void Operation::destroyPeersList(nodeEntry *n) {
@@ -479,6 +519,7 @@ Operation::~Operation() {
   gossipList.clear();
 	if(from) delete from;
 	if(to) delete to;
+	memberNode->memberList.resize(0);
 }
 
 void Operation::initPingList() {
@@ -556,13 +597,16 @@ void Operation::updatePeersList(nodeEntry *n) {
     else peersList = x;
     if(x->isFirst()) first = x;
     if(x->isLast()) last = x;
-		log->logNodeAdd(me->getAddress(&a), n->getAddress(&b));
+		_memberList_add(n->getAddress(&b)->addr, n->gethb(), (long) n->gettstamp());
+		log->logNodeAdd(me->getAddress(&a), &b);
   } else {
     if((gssp = x->sethb(n->gethb()))) {
 			x->setstatus(n->getstatus());
 			x->setmyhb(me->getmyhb());
-			if(n->getstatus() == DEAD)
-				log->logNodeRemove(me->getAddress(&a), n->getAddress(&b));
+			if(n->getstatus() == DEAD) {
+			  _memberList_del(n->getAddress(&b)->addr);
+				log->logNodeRemove(me->getAddress(&a), &b);
+			}
 		}
   }
   if(gssp)
@@ -706,7 +750,8 @@ MsgTypes Operation::decode(char *iMsg) {
 					  break;
 					case DEAD:        // I'm dead!
 					  t = LEAVE;
-					  log->logNodeRemove(me->getAddress(&x), l.getAddress(&y));
+						_memberList_del(l.getAddress(&y)->addr);
+					  log->logNodeRemove(me->getAddress(&x), &y);
 						break;
 					default:
 					  break;
@@ -731,7 +776,8 @@ void Operation::statusEval() {
 		if(n->getElapsedt() >= TFAIL) {
 			if(n->getElapsedt() >= TREMOVE) {
 				n->setstatus(DEAD);
-				log->logNodeRemove(me->getAddress(&a), n->getAddress(&b));
+				_memberList_del(n->getAddress(&b)->addr);
+				log->logNodeRemove(me->getAddress(&a), &b);
 			} else {
 				n->setstatus(SUSPECT);
 			}

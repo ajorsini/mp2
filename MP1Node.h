@@ -140,6 +140,7 @@ public:
 class Operation {
 private:
   nodeEntry *peersList, *me, *first, *last;
+  Member *memberNode;
   EmulNet *emulNet;
   vector<nodeEntry *> pingList, gossipList;
   size_t recsz, msgSz;
@@ -150,7 +151,7 @@ private:
 
 public:
   Operation() {};
-  Operation(char *addr, long hb, long myhb, Statuses status, EmulNet *emulNet, Params *par, Log *log);
+  Operation(Member *memberNode, Statuses status, EmulNet *emulNet, Params *par, Log *log);
   ~Operation();
   void destroyPeersList(nodeEntry *n);
   void initPingList();
@@ -175,7 +176,11 @@ public:
   };
   vector<nodeEntry *> getpingList() { return pingList; };
   vector<nodeEntry *> getgossipList() { return gossipList; };
+  vector<MemberListEntry>::iterator _memberList_add(char *addr, long hb, long ts);
+  vector<MemberListEntry>::iterator _memberList_search(char *addr);
+  vector<MemberListEntry>::iterator _memberList_del(char *addr);
 };
+
 
 /* ------------------------------- end myClasses ---------------------------- */
 
@@ -210,7 +215,7 @@ public:
 	void nodeLoopOps();
 	int isNullAddress(Address *addr);
 	Address getJoinAddress();
-	void initMemberListTable(Member *memberNode);
+//	void initMemberListTable(Member *memberNode);
 	void printAddress(Address *addr);
 	virtual ~MP1Node();
 };

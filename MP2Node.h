@@ -19,6 +19,43 @@
 #include "Message.h"
 #include "Queue.h"
 
+#define QTMOUT 3
+
+enum QuorumStat { QFAIL, QWAIT, QSUCCESS };
+
+class pendingRead {
+private:
+	int transID, q, timestamp;
+	string key, value[3];
+public:
+	pendingRead(int transID, int timestamp, string key) { this->transID = transID; this->timestamp = timestamp; this->key = key; q = 0; value = {"", "", ""}; }
+	~pendingRead() {};
+	int getTransID() { return transID; };
+	int setValue(string v) { value[q++] = v; return q; };
+	QuorumStat gotQuorum(int currTime);
+	string getKey() { return key; };
+	string getValue();
+};
+
+class pendingWrDl {
+private:
+	int transID, q, timestamp;
+	MessageType mt;
+	bool status[3], stblzn;
+	string key, value;
+public:
+	pendingWrDl(int transID, MessageType mt, int timestamp, string key, string value) { this->transID = transID; this->mt = mt; this->timestamp = timestamp; this->key = key; this->value = value; q = 0; status = {false, false, false}; stblzn = false; }
+	~pendingWrDl() {};
+	int getTransID() { return transID; };
+	int setStatus(bool v) { status[q++] = v; return q; };
+	QuorumStat gotQuorum(int currTime);
+	bool isStblzn() { return stblzn; };
+	void setStblzn() { stblzn = true; };
+	MessageType getMt() { return mt; };
+	string getKey() { return key; };
+	string getValue() { return value; };
+};
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -80,14 +117,27 @@ public:
 	vector<Node> findNodes(string key);
 
 	// server
-	bool createKeyValue(string key, string value, ReplicaType replica);
-	string readKey(string key);
-	bool updateKeyValue(string key, string value, ReplicaType replica);
-	bool deletekey(string key);
+	bool createKeyValue(int transID, string key, string value, ReplicaType replica);
+	string readKey(int transID, string key);
+	bool updateKeyValue(int transID, string key, string value, ReplicaType replica);
+	bool deletekey(int transID, string key);
 
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
 
+	// My public variables & methods
+	int transID;
+	vector<pendingRead> pendR;
+	vector<pendingWrDl> pendCUD;
+	int getTimeStamp { return par->getcurrtime(); };
+	vector<pendingRead>::iterator findPendRead(int transID);
+	vector<pendingWrDl>::iterator findPendWrDl(int transID);
+	void setPendRead(int transID, string value);
+	void setPendWrDl(int transID, bool st);
+	void checkPendRead();
+	void checkPendWrDl();
+
+  // Destructor
 	~MP2Node();
 };
 
