@@ -75,7 +75,7 @@ private:
 	// Ring
 	vector<Node> ring;
 	// Hash Table
-	HashTable * ht;
+	HashTable *ht;
 	// Member representing this member
 	Member *memberNode;
 	// Params object

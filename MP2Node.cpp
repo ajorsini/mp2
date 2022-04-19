@@ -528,3 +528,42 @@ void MP2Node::checkPendWrDl() {
 		}
 	}
 }
+
+/* ------------------------------------------------------------------
+  get new nodes corresponding to a given key
+---------------------------------------------------------------------*/
+vector<Node> MP2Node::findNewNodes(string key, vector<Node> newRing) {
+	size_t pos = hashFunction(key);
+	vector<Node> addr_vec;
+	if (newRing.size() >= 3) {
+		// if pos <= min || pos > max, the leader is the min
+		if (pos <= newRing.at(0).getHashCode() || pos > newRing.at(newRing.size()-1).getHashCode()) {
+			addr_vec.emplace_back(newRing.at(0));
+			addr_vec.emplace_back(newRing.at(1));
+			addr_vec.emplace_back(newRing.at(2));
+		}
+		else {
+			// go through the newRing until pos <= node
+			for (int i=1; i<newRing.size(); i++){
+				Node addr = newRing.at(i);
+				if (pos <= addr.getHashCode()) {
+					addr_vec.emplace_back(addr);
+					addr_vec.emplace_back(newRing.at((i+1)%newRing.size()));
+					addr_vec.emplace_back(newRing.at((i+2)%newRing.size()));
+					break;
+				}
+			}
+		}
+	}
+	return addr_vec;
+}
+
+bool MP2Node::isListed(Node *n, vector<Node> nList) {
+	vector<node> currNodes
+	newNodes;
+	vector<node>::iterator it;
+	bool r = false;
+	for(it = nList.begin(); it != nList.end() && !r; it++)
+	  r = (it->nodeAddress == n->nodeAddress);
+	return r;
+}
