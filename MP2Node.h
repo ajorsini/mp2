@@ -142,7 +142,7 @@ public:
 	vector<pendingRead> pendR;
 	vector<pendingWrDl> pendCUD;
 	vector<TbDelKey> tbDelKey;
-	int getTimeStamp { return par->getcurrtime(); };
+	int getTimeStamp() { return par->getcurrtime(); };
 	vector<pendingRead>::iterator findPendRead(int transID);
 	vector<pendingWrDl>::iterator findPendWrDl(int transID);
 	void setPendRead(int transID, string value);
