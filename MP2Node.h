@@ -20,6 +20,7 @@
 #include "Queue.h"
 
 #define QTMOUT 3
+#define DELKEYTMOUT 4
 
 enum QuorumStat { QFAIL, QWAIT, QSUCCESS };
 
@@ -56,6 +57,17 @@ public:
 	string getValue() { return value; };
 };
 
+class TbDelKey {
+private:
+	string key;
+	int timestamp;
+public:
+	TbDelKey(string key, int timestamp) { this->key = key; this->timestamp = timestamp; };
+	~TbDelKey() {};
+	string getKey() { return key; };
+	bool delReady(int currTime) { return ((currTime - timestamp) > DELKEYTMOUT); };
+};
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -81,13 +93,13 @@ private:
 	// Params object
 	Params *par;
 	// Object of EmulNet
-	EmulNet * emulNet;
+	EmulNet *emulNet;
 	// Object of Log
-	Log * log;
+	Log *log;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
-	Member * getMemberNode() {
+	Member *getMemberNode() {
 		return this->memberNode;
 	}
 
@@ -129,6 +141,7 @@ public:
 	int transID;
 	vector<pendingRead> pendR;
 	vector<pendingWrDl> pendCUD;
+	vector<TbDelKey> tbDelKey;
 	int getTimeStamp { return par->getcurrtime(); };
 	vector<pendingRead>::iterator findPendRead(int transID);
 	vector<pendingWrDl>::iterator findPendWrDl(int transID);
@@ -136,6 +149,9 @@ public:
 	void setPendWrDl(int transID, bool st);
 	void checkPendRead();
 	void checkPendWrDl();
+	vector<node> findNewNodes(string key, vector<Node> newRing);
+	bool isListed(Node *n, vector<Node> nList);
+	void stblznCreate(string key, string value, Node *node);
 
   // Destructor
 	~MP2Node();

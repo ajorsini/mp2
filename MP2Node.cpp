@@ -18,6 +18,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->transID = 0;
 	this->pendR.clear();
 	this->pendCUD.clear();
+	this->tbDelKey.clear();
 }
 
 /**
@@ -41,25 +42,43 @@ void MP2Node::updateRing() {
 	/*
 	 * Implement this. Parts of it are already implemented
 	 */
-	vector<Node> curMemList;
+	vector<Node> newRing, oldReplicas, newReplicas;
 	bool change = false;
+	map<string, string>::iterator hit;
+	vector<Node>::iterator rit;
+	vector<TbDelKey>::iterator dit;
 
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
 	 */
-	curMemList = getMembershipList();
+	newRing = getMembershipList();
 
 	/*
 	 * Step 2: Construct the ring
 	 */
 	// Sort the list based on the hashCode
-	sort(curMemList.begin(), curMemList.end());
+	sort(newRing.begin(), newRing.end());
 
 
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+	for( hit = ht->hashTable.begin(); hit != ht->hashTable.end(); hit++ ) {
+  	oldReplicas = findNodes(hit->first);
+		newReplicas = findNewNodes(hit->first, newRing);
+		for( rit = newReplicas.begin(); rit != newReplicas.end(); rit++ ) {
+			if(!isListed(rit->nodeAddress, oldReplicas))
+				stblznCreate(hit->first, hit->second, rit);
+		}
+	  if(!isListed(memberNode->addr), newReplicas) tbDelKey.emplace_back(hit->first, getTimeStamp());
+	}
+	for( dit = tbDelKey.begin(); dit = tbDelKey.end(); ) {
+	  if(dit->delReady(getTimeStamp())) {
+			ht->deleteKey(dit->getKey());
+			dit = tbDelKey.erase(dit);
+		} else { dit++; }
+	}
 }
 
 /**
@@ -74,16 +93,16 @@ void MP2Node::updateRing() {
  */
 vector<Node> MP2Node::getMembershipList() {
 	unsigned int i;
-	vector<Node> curMemList;
+	vector<Node> newRing;
 	for ( i = 0 ; i < this->memberNode->memberList.size(); i++ ) {
 		Address addressOfThisMember;
 		int id = this->memberNode->memberList.at(i).getid();
 		short port = this->memberNode->memberList.at(i).getport();
 		memcpy(&addressOfThisMember.addr[0], &id, sizeof(int));
 		memcpy(&addressOfThisMember.addr[4], &port, sizeof(short));
-		curMemList.emplace_back(Node(addressOfThisMember));
+		newRing.emplace_back(Node(addressOfThisMember));
 	}
-	return curMemList;
+	return newRing;
 }
 
 /**
@@ -558,12 +577,27 @@ vector<Node> MP2Node::findNewNodes(string key, vector<Node> newRing) {
 	return addr_vec;
 }
 
-bool MP2Node::isListed(Node *n, vector<Node> nList) {
+/* ----------------------------------------
+   Is this Node in the List?
+   ----------------------------------------- */
+bool MP2Node::isListed(Address addr, vector<Node> nList) {
 	vector<node> currNodes
 	newNodes;
 	vector<node>::iterator it;
 	bool r = false;
 	for(it = nList.begin(); it != nList.end() && !r; it++)
-	  r = (it->nodeAddress == n->nodeAddress);
+	  r = (it->nodeAddress == addr);
 	return r;
+}
+
+/* ----------------------------------------
+   Add key, value pair to the new node
+   ----------------------------------------- */
+void MP2Node::stblznCreate(string key, string value, Node *node) {
+	string msgBff;
+  Message message(++transID, memberNode->addr, CREATE, key, value, PRIMARY);
+	msgBff = message.toString();
+	emulNet->ENsend(memberNode->addr, node->nodeAddress, msgBff, msgBff.size());
+	pendCUD.emplace_back(transID, par->getcurrtime(), CREATE, key, value);
+	pendCUD.back().stblzn = true;
 }
