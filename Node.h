@@ -20,6 +20,7 @@ public:
 	Node(const Node& another);
 	Node& operator=(const Node& another);
 	bool operator < (const Node& another) const;
+	bool operator == (const Node& another) const;
 	void computeHashCode();
 	size_t getHashCode();
 	Address * getAddress();

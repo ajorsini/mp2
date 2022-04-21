@@ -43,7 +43,6 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> newRing, oldReplicas, newReplicas;
-	bool change = false;
 	map<string, string>::iterator hit;
 	vector<Node>::iterator rit;
 	vector<TbDelKey>::iterator dit;
@@ -64,21 +63,23 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+	if(ht->hashTable.size() == 0 && ring == newRing) return;
 	for( hit = ht->hashTable.begin(); hit != ht->hashTable.end(); hit++ ) {
   	oldReplicas = findNodes(hit->first);
 		newReplicas = findNewNodes(hit->first, newRing);
 		for( rit = newReplicas.begin(); rit != newReplicas.end(); rit++ ) {
 			if(!isListed(rit->nodeAddress, oldReplicas))
-				stblznCreate(hit->first, hit->second, rit);
+				stblznCreate(hit->first, hit->second, &(*rit));
 		}
-	  if(!isListed(memberNode->addr), newReplicas) tbDelKey.emplace_back(hit->first, getTimeStamp());
+	  if(!isListed(memberNode->addr, newReplicas)) tbDelKey.emplace_back(hit->first, getTimeStamp());
 	}
-	for( dit = tbDelKey.begin(); dit = tbDelKey.end(); ) {
+	for( dit = tbDelKey.begin(); dit != tbDelKey.end(); ) {
 	  if(dit->delReady(getTimeStamp())) {
 			ht->deleteKey(dit->getKey());
 			dit = tbDelKey.erase(dit);
 		} else { dit++; }
 	}
+	ring.swap(newRing);
 }
 
 /**
@@ -131,14 +132,15 @@ size_t MP2Node::hashFunction(string key) {
  */
 void MP2Node::clientCreate(string key, string value) {
 	vector<Node> node = findNodes(key);
+  if(node.size() < 3) return;
 	string msgBff;
   Message message(++transID, memberNode->addr, CREATE, key, value, PRIMARY);
 	for(int i=0; i<3; i++) {
 		message.replica = static_cast<ReplicaType>(i);
 		msgBff = message.toString();
-		emulNet->ENsend(memberNode->addr, node.at(i).nodeAddress, msgBff, msgBff.size());
+		emulNet->ENsend(&memberNode->addr, &node.at(i).nodeAddress, msgBff);
 	}
-	pendCUD.emplace_back(transID, par->getcurrtime(), CREATE, key, value);
+	pendCUD.emplace_back(transID, CREATE, par->getcurrtime(), key, value);
 }
 
 /**
@@ -152,11 +154,12 @@ void MP2Node::clientCreate(string key, string value) {
  */
 void MP2Node::clientRead(string key){
 	vector<Node> node = findNodes(key);
+	if(node.size() < 3) return;
 	string msgBff;
   Message message(++transID, memberNode->addr, READ, key);
 	msgBff = message.toString();
 	for(int i=0; i<3; i++)
-		emulNet->ENsend(memberNode->addr, node.at(i).nodeAddress, msgBff, msgBff.size());
+		emulNet->ENsend(&memberNode->addr, &node.at(i).nodeAddress, msgBff);
 	pendR.emplace_back(transID, par->getcurrtime(), key);
 }
 
@@ -171,14 +174,15 @@ void MP2Node::clientRead(string key){
  */
 void MP2Node::clientUpdate(string key, string value){
 	vector<Node> node = findNodes(key);
+	if(node.size() < 3) return;
 	string msgBff;
   Message message(++transID, memberNode->addr, UPDATE, key, value, PRIMARY);
 	for(int i=0; i<3; i++) {
 		message.replica = static_cast<ReplicaType>(i);
 		msgBff = message.toString();
-		emulNet->ENsend(memberNode->addr, node.at(i).nodeAddress, msgBff, msgBff.size());
+		emulNet->ENsend(&memberNode->addr, &node.at(i).nodeAddress, msgBff);
 	}
-	pendCUD.emplace_back(transID, par->getcurrtime(), UPDATE, key, value);
+	pendCUD.emplace_back(transID, UPDATE, par->getcurrtime(), key, value);
 }
 
 /**
@@ -192,12 +196,13 @@ void MP2Node::clientUpdate(string key, string value){
  */
 void MP2Node::clientDelete(string key){
 	vector<Node> node = findNodes(key);
+	if(node.size() < 3) return;
 	string msgBff;
   Message message(++transID, memberNode->addr, DELETE, key);
 	msgBff = message.toString();
 	for(int i=0; i<3; i++)
-		emulNet->ENsend(memberNode->addr, node.at(i).nodeAddress, msgBff, msgBff.size());
-	pendCUD.emplace_back(transID, par->getcurrtime(), DELETE, key, "");
+		emulNet->ENsend(&memberNode->addr, &node.at(i).nodeAddress, msgBff);
+	pendCUD.emplace_back(transID, DELETE, par->getcurrtime(), key, "");
 }
 
 /**
@@ -216,9 +221,9 @@ bool MP2Node::createKeyValue(int transID, string key, string value, ReplicaType 
 	if(ht->count(key) > 0) addKey = false;
 	if(addKey) {
 		addKey = ht->create(key, value);
-	  logCreateSuccess(&memberNode->addr, false, transID, key, value);
+	  log->logCreateSuccess(&memberNode->addr, false, transID, key, value);
 	} else
-	  logCreateFail(&memberNode->addr, false, transID, key, value);
+	  log->logCreateFail(&memberNode->addr, false, transID, key, value);
 	return addKey;
 }
 
@@ -238,9 +243,10 @@ string MP2Node::readKey(int transID, string key) {
 		readKey = (memberNode->addr == node.at(i).nodeAddress);
 	if(readKey) {
 	  v = ht->read(key);
-		if(v != "") logReadSuccess(&memberNode->addr, false, transID, key, v);
+		if(v != "") log->logReadSuccess(&memberNode->addr, false, transID, key, v);
 	} else
-	  logReadFail(&memberNode->addr, false, transID, key);
+	  log->logReadFail(&memberNode->addr, false, transID, key);
+printf("%s: \"%s\"\n", key.c_str(), v.c_str());
 	return v;
 }
 
@@ -260,9 +266,9 @@ bool MP2Node::updateKeyValue(int transID, string key, string value, ReplicaType 
 	if(ht->count(key) != 1) updtKey = false;
 	if(updtKey) {
 		updtKey = ht->update(key, value);
-	  logUpdateSuccess(&memberNode->addr, false, transID, key, value);
+	  log->logUpdateSuccess(&memberNode->addr, false, transID, key, value);
 	} else
-	  logUpdateFail(&memberNode->addr, false, transID, key, value);
+	  log->logUpdateFail(&memberNode->addr, false, transID, key, value);
 	return updtKey;
 }
 
@@ -282,9 +288,9 @@ bool MP2Node::deletekey(int transID, string key) {
 	if(ht->count(key) != 1) delKey = false;
 	if(delKey) {
 		delKey = ht->deleteKey(key);
-	  logDeleteSuccess(&memberNode->addr, false, transID, key);
+	  log->logDeleteSuccess(&memberNode->addr, false, transID, key);
 	} else
-	  logDeleteFail(&memberNode->addr, false, transID, key);
+	  log->logDeleteFail(&memberNode->addr, false, transID, key);
 	return delKey;
 }
 
@@ -299,6 +305,8 @@ bool MP2Node::deletekey(int transID, string key) {
 void MP2Node::checkMessages() {
 	char *data;
 	int size;
+	bool sendMsg = true;
+	Address toAddr;
 
 	while ( !memberNode->mp2q.empty() ) {
 		data = (char *)memberNode->mp2q.front().elt;
@@ -308,26 +316,37 @@ void MP2Node::checkMessages() {
 		Message Msg(message);
     switch(Msg.type) {
 			case CREATE:
-			  clientCreate(Msg.key, Msg.value);
+			  Msg.success = createKeyValue(Msg.transID, Msg.key, Msg.value, Msg.replica);
+				Msg.type = REPLY;
 			  break;
 			case UPDATE:
-			  clientUpdate(Msg.key, Msg.value);
+			  Msg.success = updateKeyValue(Msg.transID, Msg.key, Msg.value, Msg.replica);
+				Msg.type = REPLY;
 				break;
 			case READ:
-  			clientRead(Msg.key);
+			  Msg.value = readKey(Msg.transID, Msg.key);
+				Msg.success = (Msg.value != "");
+				Msg.type = READREPLY;
 			  break;
 			case DELETE:
-			  clientDelete(Msg.key);
+			  Msg.success = deletekey(Msg.transID, Msg.key);
+				Msg.type = REPLY;
 				break;
 			case REPLY:
 			  setPendWrDl(Msg.transID, Msg.success);
+				sendMsg = false;
 				break;
 			case READREPLY:
 			  setPendRead(Msg.transID, Msg.value);
+				sendMsg = false;
 			  break;
 		}
+		if(sendMsg) {
+			toAddr = Msg.fromAddr;
+			Msg.fromAddr = memberNode->addr;
+			emulNet->ENsend(&memberNode->addr, &toAddr, Msg.toString());
+		}
 	}
-
 	checkPendRead();
 	checkPendWrDl();
 }
@@ -350,7 +369,7 @@ vector<Node> MP2Node::findNodes(string key) {
 		}
 		else {
 			// go through the ring until pos <= node
-			for (int i=1; i<ring.size(); i++){
+			for (int i = 1; i < (int) ring.size(); i++){
 				Node addr = ring.at(i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
@@ -404,7 +423,7 @@ void MP2Node::stabilizationProtocol() {
 
 QuorumStat pendingRead::gotQuorum(int currTime) {
 	QuorumStat r;
-	n = 0;
+	int n = 0;
 	if((currTime - timestamp) < QTMOUT) {
 		if(q == 3) r = QSUCCESS;
 		else r = QWAIT;
@@ -430,7 +449,7 @@ QuorumStat pendingRead::gotQuorum(int currTime) {
 
 QuorumStat pendingWrDl::gotQuorum(int currTime) {
 	QuorumStat r;
-	n = 0;
+	int n = 0;
 
 	if(stblzn) {
 		if(q == 0) {
@@ -460,46 +479,47 @@ QuorumStat pendingWrDl::gotQuorum(int currTime) {
 vector<pendingRead>::iterator MP2Node::findPendRead(int transID) {
 	vector<pendingRead>::iterator it;
 	for (it = pendR.begin() ; it != pendR.end(); it++)
-		if(it->transID == transID) break;
+		if(it->getTransID() == transID) break;
 	return it;
 }
 
 vector<pendingWrDl>::iterator MP2Node::findPendWrDl(int transID) {
 	vector<pendingWrDl>::iterator it;
 	for (it = pendCUD.begin() ; it != pendCUD.end(); it++)
-		if(it->transID == transID) break;
+		if(it->getTransID() == transID) break;
 	return it;
 }
 
 void MP2Node::setPendRead(int transID, string value) {
 	vector<pendingRead>::iterator it = findPendRead(transID);
-	if(it != pendR.end()) pendR.setValue(value);
+	if(it != pendR.end()) it->setValue(value);
 }
 
 void MP2Node::setPendWrDl(int transID, bool st) {
 	vector<pendingWrDl>::iterator it = findPendWrDl(transID);
-	if(it != pendCUD.end()) pendCUD.setStatus(st);
+	if(it != pendCUD.end()) it->setStatus(st);
 }
 
 string pendingRead::getValue() {
   if(value[0] == value[1] || value[0] == value[2]) return value[0];
 	if(value[1] == value[2]) return value[1];
+	return "";
 }
 
 void MP2Node::checkPendRead() {
 	vector<pendingRead>::iterator rit;
 	for(rit=pendR.begin(); rit!=pendR.end(); ) {
-		switch(rit->gotQuorum()) {
+		switch(rit->gotQuorum(getTimeStamp())) {
 			case QSUCCESS:
-				logReadSuccess(&memberNode->addr, true, rit->getTransID(), rit->getKey(), rit->getValue());
+				log->logReadSuccess(&memberNode->addr, true, rit->getTransID(), rit->getKey(), rit->getValue());
 				rit = pendR.erase(rit);
 				break;
 			case QFAIL:
-				logReadFail(&memberNode->addr, true, rit->getTransID(), rit->getKey());
+				log->logReadFail(&memberNode->addr, true, rit->getTransID(), rit->getKey());
 				rit = pendR.erase(rit);
 				break;
 			case QWAIT:
-			  rit++
+			  rit++;
 				break;
 		}
 	}
@@ -508,33 +528,33 @@ void MP2Node::checkPendRead() {
 void MP2Node::checkPendWrDl() {
   vector<pendingWrDl>::iterator wit;
 	for(wit=pendCUD.begin(); wit!=pendCUD.end(); ) {
-		switch(wit->gotQuorum()) {
+		switch(wit->gotQuorum(getTimeStamp())) {
 			case QSUCCESS:
-			  switch(wit->getMt) {
+			  switch(wit->getMt()) {
 					case CREATE:
-						logCreateSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
+						log->logCreateSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
 						break;
 					case UPDATE:
-						logUpdateSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
+						log->logUpdateSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
 						break;
 					case DELETE:
-						logDeleteSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey());
+						log->logDeleteSuccess(&memberNode->addr, true, wit->getTransID(), wit->getKey());
 						break;
 					default:
 						break;
 				}
-				rit = pendCUD.erase(rit);
+				wit = pendCUD.erase(wit);
 				break;
 			case QFAIL:
-				switch(wit->getMt) {
+				switch(wit->getMt()) {
 					case CREATE:
-						logCreateFail(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
+						log->logCreateFail(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
 						break;
 					case UPDATE:
-						logUpdateFail(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
+						log->logUpdateFail(&memberNode->addr, true, wit->getTransID(), wit->getKey(), wit->getValue());
 						break;
 					case DELETE:
-						logDeleteFail(&memberNode->addr, true, wit->getTransID(), wit->getKey());
+						log->logDeleteFail(&memberNode->addr, true, wit->getTransID(), wit->getKey());
 						break;
 					default:
 						break;
@@ -542,7 +562,7 @@ void MP2Node::checkPendWrDl() {
 				wit = pendCUD.erase(wit);
 				break;
 			case QWAIT:
-			  wit++
+			  wit++;
 				break;
 		}
 	}
@@ -551,7 +571,7 @@ void MP2Node::checkPendWrDl() {
 /* ------------------------------------------------------------------
   get new nodes corresponding to a given key
 ---------------------------------------------------------------------*/
-vector<Node> MP2Node::findNewNodes(string key, vector<Node> newRing) {
+vector<Node> MP2Node::findNewNodes(string key, vector<Node>& newRing) {
 	size_t pos = hashFunction(key);
 	vector<Node> addr_vec;
 	if (newRing.size() >= 3) {
@@ -563,7 +583,7 @@ vector<Node> MP2Node::findNewNodes(string key, vector<Node> newRing) {
 		}
 		else {
 			// go through the newRing until pos <= node
-			for (int i=1; i<newRing.size(); i++){
+			for (int i = 1; i < (int) newRing.size(); i++){
 				Node addr = newRing.at(i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
@@ -581,9 +601,7 @@ vector<Node> MP2Node::findNewNodes(string key, vector<Node> newRing) {
    Is this Node in the List?
    ----------------------------------------- */
 bool MP2Node::isListed(Address addr, vector<Node> nList) {
-	vector<node> currNodes
-	newNodes;
-	vector<node>::iterator it;
+	vector<Node>::iterator it;
 	bool r = false;
 	for(it = nList.begin(); it != nList.end() && !r; it++)
 	  r = (it->nodeAddress == addr);
@@ -597,7 +615,7 @@ void MP2Node::stblznCreate(string key, string value, Node *node) {
 	string msgBff;
   Message message(++transID, memberNode->addr, CREATE, key, value, PRIMARY);
 	msgBff = message.toString();
-	emulNet->ENsend(memberNode->addr, node->nodeAddress, msgBff, msgBff.size());
-	pendCUD.emplace_back(transID, par->getcurrtime(), CREATE, key, value);
-	pendCUD.back().stblzn = true;
+	emulNet->ENsend(&memberNode->addr, &node->nodeAddress, msgBff);
+	pendCUD.emplace_back(transID, CREATE, par->getcurrtime(), key, value);
+	pendCUD.back().setStblzn();
 }

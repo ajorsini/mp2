@@ -27,9 +27,14 @@ enum QuorumStat { QFAIL, QWAIT, QSUCCESS };
 class pendingRead {
 private:
 	int transID, q, timestamp;
-	string key, value[3];
+	string key, value[3] = {""};
 public:
-	pendingRead(int transID, int timestamp, string key) { this->transID = transID; this->timestamp = timestamp; this->key = key; q = 0; value = {"", "", ""}; }
+	pendingRead(int transID, int timestamp, string key) {
+		this->transID = transID;
+		this->timestamp = timestamp;
+		this->key = key;
+		q = 0;
+	}
 	~pendingRead() {};
 	int getTransID() { return transID; };
 	int setValue(string v) { value[q++] = v; return q; };
@@ -42,10 +47,18 @@ class pendingWrDl {
 private:
 	int transID, q, timestamp;
 	MessageType mt;
-	bool status[3], stblzn;
+	bool status[3] = {false}, stblzn;
 	string key, value;
 public:
-	pendingWrDl(int transID, MessageType mt, int timestamp, string key, string value) { this->transID = transID; this->mt = mt; this->timestamp = timestamp; this->key = key; this->value = value; q = 0; status = {false, false, false}; stblzn = false; }
+	pendingWrDl(int transID, MessageType mt, int timestamp, string key, string value) {
+		this->transID = transID;
+		this->mt = mt;
+		this->timestamp = timestamp;
+		this->key = key;
+		this->value = value;
+		q = 0;
+		stblzn = false;
+	};
 	~pendingWrDl() {};
 	int getTransID() { return transID; };
 	int setStatus(bool v) { status[q++] = v; return q; };
@@ -149,8 +162,8 @@ public:
 	void setPendWrDl(int transID, bool st);
 	void checkPendRead();
 	void checkPendWrDl();
-	vector<node> findNewNodes(string key, vector<Node> newRing);
-	bool isListed(Node *n, vector<Node> nList);
+	vector<Node> findNewNodes(string key, vector<Node>& newRing);
+	bool isListed(Address addr, vector<Node> nList);
 	void stblznCreate(string key, string value, Node *node);
 
   // Destructor
