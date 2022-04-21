@@ -58,14 +58,6 @@ bool Node::operator < (const Node& another) const {
 }
 
 /**
- * operator overloading
- */
-bool Node::operator == (const Node& another) const {
-	return (this->nodeHashCode == another.nodeHashCode);
-}
-
-
-/**
  * FUNCTION NAME: getHashCode
  *
  * DESCRIPTION: return hash code of the node

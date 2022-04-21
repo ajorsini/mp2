@@ -63,7 +63,6 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-	if(ht->hashTable.size() == 0 && ring == newRing) return;
 	for( hit = ht->hashTable.begin(); hit != ht->hashTable.end(); hit++ ) {
   	oldReplicas = findNodes(hit->first);
 		newReplicas = findNewNodes(hit->first, newRing);
@@ -246,7 +245,6 @@ string MP2Node::readKey(int transID, string key) {
 		if(v != "") log->logReadSuccess(&memberNode->addr, false, transID, key, v);
 	} else
 	  log->logReadFail(&memberNode->addr, false, transID, key);
-printf("%s: \"%s\"\n", key.c_str(), v.c_str());
 	return v;
 }
 
