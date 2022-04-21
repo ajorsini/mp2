@@ -243,6 +243,7 @@ string MP2Node::readKey(int transID, string key) {
 	if(readKey) {
 	  v = ht->read(key);
 		if(v != "") log->logReadSuccess(&memberNode->addr, false, transID, key, v);
+		else log->logReadFail(&memberNode->addr, false, transID, key);
 	} else
 	  log->logReadFail(&memberNode->addr, false, transID, key);
 	return v;
