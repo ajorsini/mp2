@@ -46,6 +46,7 @@ void MP2Node::updateRing() {
 	map<string, string>::iterator hit;
 	vector<Node>::iterator rit;
 	vector<TbDelKey>::iterator dit;
+	bool changed = false;
 
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
@@ -63,6 +64,10 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+	changed = (ring.size() != newRing.size());
+	for( int i; !changed && i < (int) ring.size(); i++ )
+	  changed = (ring.at(i).nodeHashCode == newRing.at(i).nodeHashCode);
+	if(!changed) return;
 	for( hit = ht->hashTable.begin(); hit != ht->hashTable.end(); hit++ ) {
   	oldReplicas = findNodes(hit->first);
 		newReplicas = findNewNodes(hit->first, newRing);
